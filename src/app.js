@@ -1,5 +1,6 @@
 import { DEFAULTS, CURVES, SHEET_DEFAULTS, PAPER_SIZES, pageLayout, clamp, curveLut, variantGrid, sheetGeometry, sampleRegion, cloneStamp, mmToPx } from './engine.js';
 import { canvas, renderImage, renderRegion, imageDimensions, renderSheet, printDimensions, renderExport, adjustmentLabel, pdfBlob, pngBlob, download } from './render.js';
+import { openSessionStore, validateSession } from './session.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -129,7 +130,7 @@ function render() {
     $('#work-meta').textContent=`${displayMM(result.geometry.width)} × ${displayMM(result.geometry.height)} ${unit} · 100% print scale`;
     drawCropPicker();
   }
-  fitPreview();drawCurve();
+  fitPreview();drawCurve();saveSession();
 }
 function fitPreview() {
   if(!source)return;const area=$('#canvas-viewport'),maxW=area.clientWidth-48,maxH=area.clientHeight-48;if(maxW<=0||maxH<=0)return;
@@ -145,9 +146,10 @@ new ResizeObserver(fitPreview).observe($('#canvas-viewport'));
 function drawCurve(){
   const focusedHandle = document.activeElement?.closest('#curve-handles [data-index]')?.dataset.index;
   const histCanvas=$('#curve-canvas'),ctx=histCanvas.getContext('2d');ctx.clearRect(0,0,512,288);
-  ctx.strokeStyle='#e1e1e1';ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(i*128,0);ctx.lineTo(i*128,260);ctx.moveTo(0,i*65);ctx.lineTo(512,i*65);ctx.stroke();}
-  if(source){const c=canvas(128,128);c.getContext('2d').drawImage(source,0,0,128,128);const pixels=c.getContext('2d').getImageData(0,0,128,128).data,hist=Array(64).fill(0);for(let i=0;i<pixels.length;i+=4)hist[Math.min(63,Math.floor((pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722)/4))]++;const max=Math.max(...hist);ctx.fillStyle='#bdbdbd80';ctx.beginPath();ctx.moveTo(16,248);hist.forEach((v,i)=>ctx.lineTo(16+i/63*480,248-v/max*170));ctx.lineTo(496,248);ctx.closePath();ctx.fill();}
+  ctx.strokeStyle='#000';ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(i*128,0);ctx.lineTo(i*128,260);ctx.moveTo(0,i*65);ctx.lineTo(512,i*65);ctx.stroke();}
+  if(source){const c=canvas(128,128);c.getContext('2d').drawImage(source,0,0,128,128);const pixels=c.getContext('2d').getImageData(0,0,128,128).data,hist=Array(64).fill(0);for(let i=0;i<pixels.length;i+=4)hist[Math.min(63,Math.floor((pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722)/4))]++;const max=Math.max(...hist);ctx.fillStyle='#000';ctx.beginPath();ctx.moveTo(16,248);hist.forEach((v,i)=>ctx.lineTo(16+i/63*480,248-v/max*170));ctx.lineTo(496,248);ctx.closePath();ctx.fill();}
   const lut=curveLut(curve);$('#curve-line').setAttribute('d',[...lut].filter((_,i)=>i%3===0||i===255).map((v,i)=>`${i?'L':'M'}${Math.min(255,i*3)/255*256},${144-v/255*144}`).join(' '));
+  $('#curve-underlay').setAttribute('d',$('#curve-line').getAttribute('d'));
   const handles=$('#curve-handles');handles.replaceChildren();curve.forEach(([x,y],i)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',x/255*256);c.setAttribute('cy',144-y/255*144);c.setAttribute('r','3.2');c.dataset.index=i;c.setAttribute('tabindex','0');c.setAttribute('role','slider');c.setAttribute('aria-label',`Curve point ${i+1} output`);c.setAttribute('aria-valuemin','0');c.setAttribute('aria-valuemax','255');c.setAttribute('aria-valuenow',y);c.addEventListener('keydown',e=>{if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();remember();if(e.key==='ArrowUp'||e.key==='ArrowDown')curve[i][1]=clamp(y+(e.key==='ArrowUp'?3:-3),0,255);else if(i>0&&i<curve.length-1)curve[i][0]=clamp(x+(e.key==='ArrowRight'?3:-3),curve[i-1][0]+5,curve[i+1][0]-5);$('#curve-preset').value='custom';drawCurve();$(`#curve-handles [data-index="${i}"]`).focus();scheduleRender();});handles.append(c);});
   if(focusedHandle!==undefined)$(`#curve-handles [data-index="${focusedHandle}"]`)?.focus({preventScroll:true});
 }
@@ -259,7 +261,7 @@ $('#download-export').addEventListener('click',async()=>{
   }
 });
 
-// Images, edits, and history exist only in this tab's memory. No uploads or saves.
+// Images and edits stay on this device, with the current workspace in IndexedDB.
 let loadGeneration=0;
 async function decodeImage(file) {
   return new Promise((resolve,reject)=>{
@@ -268,10 +270,10 @@ async function decodeImage(file) {
     image.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Could not open this image.'));};image.src=url;
   });
 }
-function imageCanvas(image) {
+function imageCanvas(image,notify=true) {
   const factor=Math.min(1,6000/Math.max(image.width,image.height),Math.sqrt(24_000_000/(image.width*image.height)));
   const c=canvas(image.width*factor,image.height*factor),ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(image,0,0,c.width,c.height);
-  if(factor<1)toast(`Resized to ${c.width} × ${c.height} px.`);return c;
+  if(factor<1&&notify)toast(`Resized to ${c.width} × ${c.height} px.`);return c;
 }
 function copyCanvas(c){const out=canvas(c.width,c.height);out.getContext('2d').drawImage(c,0,0);return out;}
 async function loadFile(file) {
@@ -280,17 +282,19 @@ async function loadFile(file) {
   try {
     const image=await decodeImage(file);if(generation!==loadGeneration)return;
     $('#export-dialog').close();$('#export-preview').width=1;$('#export-preview').height=1;
-    source=original=imageCanvas(image);sourceName=file.name;settings={...DEFAULTS};curve=clone(CURVES.linear);sheet={...SHEET_DEFAULTS};
+    source=original=imageCanvas(image);imageBlobs.set(original,Promise.resolve(file));sessionRevision++;
+    sourceName=file.name;settings={...DEFAULTS};curve=clone(CURVES.linear);sheet={...SHEET_DEFAULTS};
     undoStack=[];redoStack=[];clearClone();view='lab';mode='negative';tool='adjust';zoom=1;compare=false;
-    syncControls();updateHistory();scheduleRender();
+    syncControls();updateHistory();scheduleRender();saveSession();
   } catch(e){toast(e.message,true);}
 }
 $$('.upload-trigger').forEach(b=>b.addEventListener('click',()=>$('#image-input').click()));
 $('#image-input').addEventListener('change',e=>{loadFile(e.target.files[0]);e.target.value='';});
 $('#close-image').addEventListener('click',()=>{
-  loadGeneration++;source=null;original=null;sourceName='';undoStack=[];redoStack=[];selectedVariant=null;clearClone();
+  loadGeneration++;sessionRevision++;source=null;original=null;sourceName='';undoStack=[];redoStack=[];selectedVariant=null;clearClone();
   for(const id of ['preview-canvas','variation-canvas','crop-canvas','export-preview']){const c=$('#'+id);c.width=1;c.height=1;}
   $('#sheet-preview').replaceChildren();$('#variant-list').replaceChildren();$('#source-name').textContent='';$('#source-dimensions').textContent='';updateHistory();updateView();
+  pendingSession={revision:sessionRevision,state:null};void writeSession();
 });
 let dragDepth=0;
 window.addEventListener('dragenter',e=>{if(e.dataTransfer?.types.includes('Files')){e.preventDefault();dragDepth++;$('#drop-overlay').hidden=false;}});
@@ -308,6 +312,71 @@ window.addEventListener('keydown',e=>{
 window.addEventListener('keyup',e=>{if(e.key==='\\'){compare=false;updateView();scheduleRender();}});
 window.addEventListener('blur',()=>{if(compare){compare=false;updateView();scheduleRender();}});
 
-// Remove the earlier version's browser autosave. Nothing is read back or stored.
-try{indexedDB.deleteDatabase('cyanotype-darkroom');}catch{/* Storage may be disabled. */}
-syncControls();
+const exportFields=['export-kind','export-paper','export-orientation','export-format','export-dpi','export-polarity'];
+const imageBlobs=new WeakMap();
+let sessionRevision=0,restoringSession=true,writingSession=false,pendingSession=null;
+let savedSource=null,savedOriginal=null,savedSignature='',saveErrorShown=false;
+const sessionStore=openSessionStore().catch(()=>null);
+
+function sessionState(){
+  return {version:1,sourceName,settings:{...settings},curve:clone(curve),sheet:{...sheet},sourceIsOriginal:source===original,
+    view,mode,tool,unit,zoom,brush:{size:Number($('#brush-size').value),opacity:Number($('#brush-opacity').value)},
+    export:Object.fromEntries(exportFields.map(id=>[id,$('#'+id).value]))};
+}
+function imageBlob(image){
+  if(!imageBlobs.has(image))imageBlobs.set(image,new Promise((resolve,reject)=>image.toBlob(blob=>blob?resolve(blob):reject(Error('Could not save image data.')),'image/png')));
+  return imageBlobs.get(image);
+}
+function saveSession(){
+  if(restoringSession||!source||painting)return;
+  const state=sessionState(),signature=JSON.stringify(state);
+  if(!writingSession&&!pendingSession&&source===savedSource&&original===savedOriginal&&signature===savedSignature)return;
+  pendingSession={revision:sessionRevision,state,source,original,signature};void writeSession();
+}
+async function writeSession(){
+  if(writingSession)return;writingSession=true;
+  try{
+    const store=await sessionStore;
+    if(!store)throw Error('Browser storage is unavailable.');
+    while(pendingSession){
+      const snapshot=pendingSession;pendingSession=null;
+      if(!snapshot.state){await store.clear();savedSource=savedOriginal=null;savedSignature='';continue;}
+      const images={};
+      if(snapshot.original!==savedOriginal)images.original=await imageBlob(snapshot.original);
+      if(snapshot.source!==snapshot.original&&snapshot.source!==savedSource)images.edited=await imageBlob(snapshot.source);
+      if(snapshot.revision!==sessionRevision)continue;
+      await store.write(snapshot.state,images);
+      savedSource=snapshot.source;savedOriginal=snapshot.original;savedSignature=snapshot.signature;saveErrorShown=false;
+    }
+  }catch{
+    pendingSession=null;
+    if(source&&!saveErrorShown){saveErrorShown=true;toast('Browser storage couldn’t save this image. Refresh may lose changes.',true);}
+  }finally{writingSession=false;}
+}
+async function restoreSession(){
+  const generation=loadGeneration;
+  try{
+    const store=await sessionStore;if(!store)return;
+    const saved=await store.read();if(!saved||generation!==loadGeneration)return;
+    const state=validateSession(saved.state);
+    if(!(saved.original instanceof Blob)||(!state.sourceIsOriginal&&!(saved.edited instanceof Blob)))throw Error('Missing saved image.');
+    const originalImage=await decodeImage(saved.original),editedImage=state.sourceIsOriginal?null:await decodeImage(saved.edited);
+    if(generation!==loadGeneration)return;
+    original=imageCanvas(originalImage,false);source=editedImage?imageCanvas(editedImage,false):original;
+    if(source.width!==original.width||source.height!==original.height)throw Error('Inconsistent saved image.');
+    imageBlobs.set(original,Promise.resolve(saved.original));if(editedImage)imageBlobs.set(source,Promise.resolve(saved.edited));
+    sourceName=state.sourceName;settings={...state.settings};curve=clone(state.curve);sheet={...state.sheet};
+    view=['lab','sheet'].includes(state.view)?state.view:'lab';mode=['original','negative','proof'].includes(state.mode)?state.mode:'negative';
+    tool=state.tool==='retouch'?'retouch':'adjust';unit=state.unit==='in'?'in':'mm';zoom=Number.isFinite(state.zoom)?clamp(state.zoom,.5,3):1;
+    $('#brush-size').value=state.brush?.size||40;$('#brush-opacity').value=state.brush?.opacity||100;
+    $('#brush-size-value').textContent=$('#brush-size').value+' px';$('#brush-opacity-value').textContent=$('#brush-opacity').value+'%';
+    for(const id of exportFields){const value=state.export?.[id];if([...$('#'+id).options].some(option=>option.value===value))$('#'+id).value=value;}
+    savedSource=source;savedOriginal=original;savedSignature=JSON.stringify(state);
+    clearClone();syncControls();updateHistory();scheduleRender();
+  }catch{
+    if(generation===loadGeneration){source=original=null;updateView();toast('Couldn’t restore the saved image. Open it again.',true);}
+  }finally{restoringSession=false;if(source)saveSession();}
+}
+for(const event of ['input','change','click','pointerup','pointercancel','keyup'])document.addEventListener(event,()=>queueMicrotask(saveSession));
+window.addEventListener('pagehide',saveSession);
+syncControls();void restoreSession();

@@ -18,7 +18,7 @@ Work directly on GitHub `main` and push tested milestones. ChatGPT Sites publica
 
 ## Flow
 
-Open the URL, choose or drop an image, edit, export. The page starts empty. There is no branding, sample image, library, project format, or save/open-project workflow.
+Open the URL, choose or drop an image, edit, export. Refresh restores the current image and settings from browser storage. With no saved session, the page starts at the image picker. There is no branding, sample image, library, project format, or save/open-project workflow.
 
 The editor includes exposure, contrast, shadows, highlights, grain, editable curves, inversion, mirroring, flipping, rotation, a clone brush, and undo/redo. The blue preview is an uncalibrated tone simulation.
 
@@ -38,7 +38,9 @@ Select **Image / sheet size** to export just the artwork with no surrounding pap
 
 ## Data handling
 
-User images, edits, and undo history stay in the current browser tab's memory. They are not uploaded, written to the server, or persisted. Reloading or closing the image clears the editing session. The previous prototype's IndexedDB autosave is deleted on load.
+The current image, retouched version, original image, curves, print dimensions, contact-sheet settings, and export choices are saved locally in IndexedDB in this browser. Refresh restores that workspace. Closing the image with × clears the saved session. Undo/redo history is held in memory and starts fresh after reload.
+
+User images and edits are never uploaded or written to the server or a folder. Browser data can be removed with the browser's normal site-data controls. If local storage is unavailable or full, editing still works and the app reports that refresh recovery is unavailable.
 
 Only the explicit Download action creates an output file through the browser's normal download behavior. The browser decides its download location; the app does not request filesystem or folder access.
 
@@ -49,6 +51,7 @@ Source images above 6,000 px on the longest edge or 24 megapixels are resized wi
 - `src/engine.js`: tone processing, curves, grain, cloning, physical geometry, and crop math.
 - `src/render.js`: canvas rendering, text-free compositing, PDF encoding, PNG metadata.
 - `src/app.js`: editing interface and in-memory state.
+- `src/session.js`: browser-local session storage and validation.
 - `test/engine.test.js`: image and geometry regression tests.
 
-The interface uses a monochrome palette and the system UI font stack (San Francisco on Apple devices); no fonts are downloaded.
+The interface uses black and white surfaces, a viewer grid, and the system UI font stack (San Francisco on Apple devices), with SF Mono for numeric controls and measurements. No fonts are downloaded.

@@ -40,7 +40,7 @@
         <div class="tool-tabs" aria-label="Image tools"><button class="active" data-tool="adjust">Adjust</button><button data-tool="retouch">Retouch</button></div>
         <div id="adjust-controls">
           <section class="control-section"><div class="section-heading"><h2>Tones</h2><button class="small-text" id="reset-all">Reset</button></div><div id="sliders"></div></section>
-          <section class="control-section"><div class="section-heading"><h2>Curves</h2><select id="curve-preset" aria-label="Curve preset"><option value="linear">Linear</option><option value="contrast">S-curve</option><option value="soft">Soft</option><option value="custom" hidden>Custom</option></select></div><div class="curve-wrap"><canvas id="curve-canvas" width="512" height="288" aria-label="Histogram"></canvas><svg id="curve-editor" viewBox="0 0 256 144" aria-label="Tone curve" role="group"><path id="curve-line"/><g id="curve-handles"></g></svg></div></section>
+          <section class="control-section"><div class="section-heading"><h2>Curves</h2><select id="curve-preset" aria-label="Curve preset"><option value="linear">Linear</option><option value="contrast">S-curve</option><option value="soft">Soft</option><option value="custom" hidden>Custom</option></select></div><div class="curve-wrap"><canvas id="curve-canvas" width="512" height="288" aria-label="Histogram"></canvas><svg id="curve-editor" viewBox="0 0 256 144" aria-label="Tone curve" role="group"><path id="curve-underlay" aria-hidden="true"/><path id="curve-line"/><g id="curve-handles"></g></svg></div></section>
           <label class="toggle-row"><span>Invert</span><input type="checkbox" id="invert" checked/><span class="switch"></span></label>
         </div>
         <div id="retouch-controls" hidden>
