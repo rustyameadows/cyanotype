@@ -11,7 +11,8 @@
   --text-size: 12px;
   --meta-size: 11px;
   --title-size: 14px;
-  --grid: linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px);
+  --grid-line: #ececec;
+  --grid: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   --ink: #000;
   --muted: #000;
   --line: #000;

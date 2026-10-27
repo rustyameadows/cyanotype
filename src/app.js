@@ -146,7 +146,7 @@ new ResizeObserver(fitPreview).observe($('#canvas-viewport'));
 function drawCurve(){
   const focusedHandle = document.activeElement?.closest('#curve-handles [data-index]')?.dataset.index;
   const histCanvas=$('#curve-canvas'),ctx=histCanvas.getContext('2d');ctx.clearRect(0,0,512,288);
-  ctx.strokeStyle='#000';ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(i*128,0);ctx.lineTo(i*128,260);ctx.moveTo(0,i*65);ctx.lineTo(512,i*65);ctx.stroke();}
+  ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid-line').trim();ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(i*128,0);ctx.lineTo(i*128,260);ctx.moveTo(0,i*65);ctx.lineTo(512,i*65);ctx.stroke();}
   if(source){const c=canvas(128,128);c.getContext('2d').drawImage(source,0,0,128,128);const pixels=c.getContext('2d').getImageData(0,0,128,128).data,hist=Array(64).fill(0);for(let i=0;i<pixels.length;i+=4)hist[Math.min(63,Math.floor((pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722)/4))]++;const max=Math.max(...hist);ctx.fillStyle='#000';ctx.beginPath();ctx.moveTo(16,248);hist.forEach((v,i)=>ctx.lineTo(16+i/63*480,248-v/max*170));ctx.lineTo(496,248);ctx.closePath();ctx.fill();}
   const lut=curveLut(curve);$('#curve-line').setAttribute('d',[...lut].filter((_,i)=>i%3===0||i===255).map((v,i)=>`${i?'L':'M'}${Math.min(255,i*3)/255*256},${144-v/255*144}`).join(' '));
   $('#curve-underlay').setAttribute('d',$('#curve-line').getAttribute('d'));
