@@ -29,7 +29,7 @@ function undo(){if(!undoStack.length)return;redoStack.push(capture());restore(un
 function redo(){if(!redoStack.length)return;undoStack.push(capture());restore(redoStack.pop());updateHistory();}
 function updateHistory(){$('#undo').disabled=!undoStack.length;$('#redo').disabled=!redoStack.length;}
 function rangePaint(input){input.style.setProperty('--range-progress',`${(Number(input.value)-Number(input.min))/(Number(input.max)-Number(input.min))*100}%`);}
-function numberLabel(key,value){return `${value>0&&key!=='grain'?'+':''}${key==='exposure'?Number(value).toFixed(2):Math.round(value)}${key==='exposure'?' EV':''}`;}
+function numberLabel(key,value){return `${value>0&&key!=='grain'?'+':''}${Number(value.toFixed(3))}${key==='exposure'?' EV':''}`;}
 const displayMM = mm => Number((mm/(unit==='in'?25.4:1)).toFixed(unit==='in'?3:1));
 const fromUnit = number => number*(unit==='in'?25.4:1);
 const formatMM = number => Number(number.toFixed(2));
@@ -49,7 +49,7 @@ function constrainSample() {
   sheet.tileHeight=Math.min(sheet.tileHeight,sheet.printWidth*h/w);
 }
 function syncControls() {
-  for(const [key]of sliderDefs){$(`#${key}`).value=settings[key];$(`#${key}-value`).textContent=numberLabel(key,settings[key]);}
+  for(const [key,,,,step]of sliderDefs){const input=$(`#${key}`);input.step=Math.abs(settings[key]/step-Math.round(settings[key]/step))>1e-6?.001:step;input.value=settings[key];$(`#${key}-value`).textContent=numberLabel(key,settings[key]);}
   $('#invert').checked=settings.invert;
   $('#mirror').setAttribute('aria-pressed',settings.mirror);$('#flip').setAttribute('aria-pressed',settings.flip);
   $('#curve-preset').value=Object.keys(CURVES).find(key=>JSON.stringify(CURVES[key])===JSON.stringify(curve))||'custom';

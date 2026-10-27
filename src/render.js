@@ -24,7 +24,7 @@ export function renderImage(source, settings, curve, mode, maxEdge = 1200) {
   }
   return c;
 }
-export const adjustmentLabel = (key, value) => `${key[0].toUpperCase()+key.slice(1)} ${value > 0 ? '+' : ''}${Number(value.toFixed(key==='exposure'?2:1))}${key==='exposure'?' EV':''}`;
+export const adjustmentLabel = (key, value) => `${key[0].toUpperCase()+key.slice(1)} ${value > 0 ? '+' : ''}${Number(value.toFixed(3))}${key==='exposure'?' EV':''}`;
 
 export function renderRegion(source,settings,curve,mode,region,printWidth,dpi) {
   const [w,h]=imageDimensions(source,settings),scale=printWidth/w*dpi/25.4;

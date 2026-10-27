@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULTS, CURVES, SHEET_DEFAULTS, curveLut, processPixels, variantGrid, mmToPx, mmToPt, sheetGeometry, sampleRegion, cloneStamp } from '../src/engine.js';
+import { adjustmentLabel } from '../src/render.js';
 test('linear curves preserve every gray value', () => { assert.deepEqual([...curveLut(CURVES.linear)], Array.from({length:256},(_,i)=>i)); });
 test('a print negative reverses black and white; proof restores print polarity', () => {
   const pixels = new Uint8ClampedArray([0,0,0,255,255,255,255,255]);
@@ -27,6 +28,10 @@ test('large step sizes are spread across the available range without duplicates'
   const v = variantGrid({...DEFAULTS,grain:60},{layout:'grid9',axis:'grain',axis2:'none',step:40});
   assert.equal(new Set(v.map(s=>s.settings.grain)).size,9);
   assert.equal(v[0].settings.grain,0);assert.equal(v[8].settings.grain,60);
+});
+test('variation readouts preserve fractional exposure and contrast settings', () => {
+  assert.equal(adjustmentLabel('exposure',.025),'Exposure +0.025 EV');
+  assert.equal(adjustmentLabel('contrast',2.5),'Contrast +2.5');
 });
 test('a strip contains only four touching samples and hairline dividers', () => {
   const g=sheetGeometry(SHEET_DEFAULTS);
