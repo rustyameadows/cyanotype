@@ -5,9 +5,9 @@ export const CURVES = {
   soft: [[0, 12], [64, 73], [128, 133], [192, 189], [255, 246]],
   contrast: [[0, 0], [64, 45], [128, 128], [192, 212], [255, 255]],
 };
-export const PAPER = { letter: [215.9, 279.4], a4: [210, 297], a5: [148, 210], square: [203.2, 203.2], custom: [203.2, 254] };
 export const mmToPx = (mm, dpi) => Math.round(mm / 25.4 * dpi);
 export const mmToPt = mm => mm / 25.4 * 72;
+export const SHEET_DEFAULTS = Object.freeze({layout:'strip',axis:'contrast',step:15,axis2:'grain',step2:20,printWidth:150,tileWidth:50,tileHeight:50,divider:0.1,cropX:0.5,cropY:0.5});
 
 // Shape-preserving cubic interpolation avoids ringing between curve handles.
 export function curveLut(points) {
@@ -41,12 +41,12 @@ export function toneLut(settings, points) {
   });
 }
 
-export function processPixels(data, width, settings, points, mode = 'negative') {
+export function processPixels(data, width, settings, points, mode = 'negative', offset = {x:0,y:0}) {
   const out = new Uint8ClampedArray(data.length), lut = toneLut(settings, points);
   for (let i = 0; i < data.length; i += 4) {
     const alpha = data[i + 3] / 255;
     const gray = Math.round((0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2]) * alpha + 255 * (1-alpha));
-    let v = clamp(lut[gray] + noise((i/4)%width, Math.floor(i/4/width)) * settings.grain / 100);
+    let v = clamp(lut[gray] + noise((i/4)%width+offset.x, Math.floor(i/4/width)+offset.y) * settings.grain / 100);
     if (settings.invert) v = 1 - v;
     if (mode === 'proof') {
       // White inkjet pixels are clear film: more light reaches the coating.
@@ -85,16 +85,22 @@ export function variantGrid(settings, config) {
   });
 }
 
-export function sheetGeometry(widthMM, heightMM, config) {
+export function sheetGeometry(config) {
   const columns = config.layout === 'strip' ? 1 : 3;
   const rows = config.layout === 'strip' ? 4 : config.layout === 'grid6' ? 2 : 3;
-  const margin = Number(config.margin), gap = Number(config.gap), label = config.labels ? 8 : 0;
-  const header = config.labels ? 13 : 0;
-  const cellWidth = config.layout === 'strip' ? Math.min(70, widthMM-margin*2) : (widthMM - margin*2 - gap*(columns-1)) / columns;
-  const cellHeight = (heightMM - margin*2 - header - gap*(rows-1)) / rows;
-  if (cellWidth < 8 || cellHeight - label < 8) throw Error('Margins and spacing leave too little room for the images.');
-  const originX = config.layout === 'strip' ? (widthMM-cellWidth)/2 : margin;
-  return { columns, rows, margin, originX, gap, label, header, cellWidth, cellHeight };
+  const cellWidth = Number(config.tileWidth), cellHeight = Number(config.tileHeight), divider = Number(config.divider);
+  if (![cellWidth,cellHeight,divider].every(Number.isFinite) || cellWidth<1 || cellHeight<1 || divider<0 || divider>0.25) throw Error('Invalid sample dimensions or divider.');
+  return {columns,rows,cellWidth,cellHeight,divider,width:columns*cellWidth+(columns-1)*divider,height:rows*cellHeight+(rows-1)*divider};
+}
+
+// A test is a window into the full-size print, never a fitted thumbnail.
+export function sampleRegion(imageWidth, imageHeight, config) {
+  const printWidth=Number(config.printWidth), printHeight=printWidth*imageHeight/imageWidth;
+  if (!Number.isFinite(printWidth)||printWidth<=0||config.tileWidth>printWidth+1e-8||config.tileHeight>printHeight+1e-8) throw Error('The sample must fit within the print dimensions.');
+  const w=config.tileWidth/printWidth*imageWidth,h=config.tileHeight/printHeight*imageHeight;
+  const x=clamp(config.cropX*imageWidth-w/2,0,Math.max(0,imageWidth-w));
+  const y=clamp(config.cropY*imageHeight-h/2,0,Math.max(0,imageHeight-h));
+  return {x,y,w,h,printWidth,printHeight};
 }
 
 // Feathered clone stamping works on the original color image, before tone mapping.

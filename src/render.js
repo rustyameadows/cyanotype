@@ -1,4 +1,4 @@
-import { processPixels, sheetGeometry, variantGrid, mmToPx, mmToPt } from './engine.js';
+import { processPixels, sheetGeometry, sampleRegion, variantGrid, mmToPx, mmToPt } from './engine.js';
 
 export function canvas(width, height) {
   const c = document.createElement('canvas');
@@ -24,44 +24,47 @@ export function renderImage(source, settings, curve, mode, maxEdge = 1200) {
   }
   return c;
 }
-export function drawContained(ctx, image, x, y, w, h) {
-  const scale = Math.min(w/image.width, h/image.height);
-  const dw = image.width*scale, dh = image.height*scale;
-  ctx.drawImage(image, x+(w-dw)/2, y+(h-dh)/2, dw, dh);
-}
 export const adjustmentLabel = (key, value) => `${key[0].toUpperCase()+key.slice(1)} ${value > 0 ? '+' : ''}${Number(value.toFixed(key==='exposure'?2:1))}${key==='exposure'?' EV':''}`;
 
-export function renderSheet(source, settings, curve, config, paper, mode, dpi, title) {
-  const [w, h] = paper, c = canvas(mmToPx(w,dpi),mmToPx(h,dpi)), ctx = c.getContext('2d');
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,c.width,c.height);
-  const g = sheetGeometry(w,h,config), variants = variantGrid(settings,config), scale = dpi/25.4;
-  ctx.save(); ctx.scale(scale,scale); ctx.fillStyle='#222';
-  if(config.labels){ctx.font='2.7px sans-serif';ctx.fillText(title.toUpperCase().slice(0,50),g.margin,g.margin+3);ctx.font='2px sans-serif';ctx.fillStyle='#555';ctx.fillText(`CYANOTYPE / ${mode==='proof'?'SIMULATED PROOF':mode.toUpperCase()} / ${variants.length} STUDIES`,g.margin,g.margin+7);}
-  const cells = [];
-  for(const v of variants){
-    const x=g.originX+(v.index-1)%g.columns*(g.cellWidth+g.gap), y=g.margin+g.header+Math.floor((v.index-1)/g.columns)*(g.cellHeight+g.gap);
-    const ih=g.cellHeight-g.label;
-    const img=renderImage(source,v.settings,curve,mode,Math.ceil(Math.max(g.cellWidth,ih)*scale));
-    drawContained(ctx,img,x,y,g.cellWidth,ih);
-    if(config.guides){ctx.strokeStyle='#777';ctx.lineWidth=.15;const l=2;for(const [cx,cy,dx,dy] of [[x,y,-1,-1],[x+g.cellWidth,y,1,-1],[x,y+ih,-1,1],[x+g.cellWidth,y+ih,1,1]]){ctx.beginPath();ctx.moveTo(cx+dx*.5,cy);ctx.lineTo(cx+dx*l,cy);ctx.moveTo(cx,cy+dy*.5);ctx.lineTo(cx,cy+dy*l);ctx.stroke();}}
-    if(config.labels){ctx.fillStyle='#333';ctx.font='1.8px sans-serif';const label=`${String(v.index).padStart(2,'0')}  /  ${v.values.map(([k,val])=>adjustmentLabel(k,val)).join(' · ')}`;ctx.fillText(label,x,y+ih+3.7,g.cellWidth);}
-    cells.push({x:x/w,y:y/h,w:g.cellWidth/w,h:ih/h,variant:v});
+export function renderRegion(source,settings,curve,mode,region,printWidth,dpi) {
+  const [w,h]=imageDimensions(source,settings),scale=printWidth/w*dpi/25.4;
+  const c=canvas(region.w*scale,region.h*scale),ctx=c.getContext('2d',{willReadFrequently:true});
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  ctx.save();ctx.scale(c.width/region.w,c.height/region.h);ctx.translate(-region.x,-region.y);
+  ctx.translate(w/2,h/2);ctx.scale(settings.mirror?-1:1,settings.flip?-1:1);ctx.rotate(settings.rotation*Math.PI/180);
+  ctx.drawImage(source,-source.width/2,-source.height/2);ctx.restore();
+  if(mode!=='original'){
+    const pixels=ctx.getImageData(0,0,c.width,c.height);
+    pixels.data.set(processPixels(pixels.data,c.width,settings,curve,mode,{x:Math.round(region.x*scale),y:Math.round(region.y*scale)}));
+    ctx.putImageData(pixels,0,0);
   }
-  ctx.restore();return {canvas:c,cells};
+  return c;
+}
+
+export function renderSheet(source, settings, curve, config, mode='negative', dpi=150) {
+  const g=sheetGeometry(config),[w,h]=imageDimensions(source,settings),region=sampleRegion(w,h,config);
+  const c=canvas(mmToPx(g.width,dpi),mmToPx(g.height,dpi)),ctx=c.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  const cells=[];
+  for(const v of variantGrid(settings,config)){
+    const col=(v.index-1)%g.columns,row=Math.floor((v.index-1)/g.columns);
+    const x=col*(g.cellWidth+g.divider),y=row*(g.cellHeight+g.divider);
+    const left=mmToPx(x,dpi),top=mmToPx(y,dpi),right=mmToPx(x+g.cellWidth,dpi),bottom=mmToPx(y+g.cellHeight,dpi);
+    const image=renderRegion(source,v.settings,curve,mode,region,config.printWidth,dpi);
+    ctx.drawImage(image,left,top,right-left,bottom-top);
+    cells.push({x:x/g.width,y:y/g.height,w:g.cellWidth/g.width,h:g.cellHeight/g.height,variant:v});
+  }
+  return {canvas:c,cells,geometry:g};
 }
 
 export function renderPrint(source, settings, curve, options) {
-  const [w,h]=options.paper, width=mmToPx(w,options.dpi),height=mmToPx(h,options.dpi);
-  if(width*height>36_000_000)throw Error('This page is too large at that resolution. Choose a lower DPI or smaller paper (maximum 36 megapixels).');
+  const [sw,sh]=imageDimensions(source,settings),g=sheetGeometry(options.sheet);
+  const dimensions=options.kind==='sheet'?[g.width,g.height]:[options.sheet.printWidth,options.sheet.printWidth*sh/sw];
+  const width=mmToPx(dimensions[0],options.dpi),height=mmToPx(dimensions[1],options.dpi);
+  if(width*height>36_000_000)throw Error('Export exceeds 36 megapixels. Reduce the size or DPI.');
   const printSettings={...settings,invert:options.polarity==='negative'};
-  if(options.kind==='sheet')return renderSheet(source,printSettings,curve,options.sheet,options.paper,'negative',options.dpi,options.title).canvas;
-  const c=canvas(width,height),ctx=c.getContext('2d'),[sw,sh]=imageDimensions(source,settings);
-  const iw=options.imageWidth,ih=iw*sh/sw;
-  if(iw>w-10||ih>h-10)throw Error('The image does not fit with a 5 mm print margin. Reduce the image width or choose larger paper.');
-  const img=renderImage(source,printSettings,curve,'negative',Math.ceil(Math.max(iw,ih)/25.4*options.dpi));
-  ctx.fillStyle='white';ctx.fillRect(0,0,width,height);
-  ctx.drawImage(img,(width-iw/25.4*options.dpi)/2,(height-ih/25.4*options.dpi)/2,iw/25.4*options.dpi,ih/25.4*options.dpi);
-  return c;
+  if(options.kind==='sheet')return renderSheet(source,printSettings,curve,options.sheet,'negative',options.dpi).canvas;
+  return renderRegion(source,printSettings,curve,'negative',{x:0,y:0,w:sw,h:sh},options.sheet.printWidth,options.dpi);
 }
 
 const encode = s => new TextEncoder().encode(s);
