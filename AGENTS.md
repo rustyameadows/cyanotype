@@ -1,7 +1,7 @@
 # Project instructions
 
 - Work on `main`. Commit and push coherent, tested milestones directly to GitHub `origin/main`; do not leave completed work only in the local checkout.
-- Keep the app local at http://localhost:5173. Publishing to ChatGPT Sites requires explicit user approval. A Site is reserved in `.openai/hosting.json` but has not been deployed.
+- Local development runs at http://localhost:5173. The user approved publishing the current version on October 26, 2026; it is live privately at https://cyanotype-darkroom.rameadows.chatgpt.site. Keep the Site ID in `.openai/hosting.json` and preserve its access policy. Publishing additional versions still requires explicit user approval unless already authorized in the current request.
 - Use stark black and white interface surfaces and rules, with very light, subtle gray grid lines behind the viewer and in the curves graph. Use the system UI font (San Francisco on Apple devices), with SF Mono for numbers and measurements. Keep the type hierarchy small and control spacing consistent. Keep actual image and cyanotype preview colors intact.
 - This is a simple image tool: open URL, choose an image, edit, export. No branding, marketing copy, sample images, project/library/folder workflows, or project-file formats.
 - Save the current image and settings in browser-local IndexedDB so refresh restores the active workspace. Include retouching and its original image, curves, print/contact-sheet settings, and export choices. Closing the image with × clears the saved session. Do not upload user data or write it to a server or folder. Downloads must be explicit PNG/PDF exports; no project or library workflow.

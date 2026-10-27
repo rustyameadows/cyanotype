@@ -14,7 +14,7 @@ npm run build
 
 Open http://localhost:5173. The server binds to loopback only. `dist/` contains the static build.
 
-Work directly on GitHub `main` and push tested milestones. ChatGPT Sites publication is on hold until the user explicitly approves it.
+Work directly on GitHub `main` and push tested milestones. The current release is published privately at [the hosted app](https://cyanotype-darkroom.rameadows.chatgpt.site), following user approval on October 26, 2026. App source revision: `e870ef7`. Publishing additional versions requires user approval.
 
 ## Flow
 
@@ -41,6 +41,8 @@ Select **Image / sheet size** to export just the artwork with no surrounding pap
 The current image, retouched version, original image, curves, print dimensions, contact-sheet settings, and export choices are saved locally in IndexedDB in this browser. Refresh restores that workspace. Closing the image with × clears the saved session. Undo/redo history is held in memory and starts fresh after reload.
 
 User images and edits are never uploaded or written to the server or a folder. Browser data can be removed with the browser's normal site-data controls. If local storage is unavailable or full, editing still works and the app reports that refresh recovery is unavailable.
+
+Browser storage belongs to each site origin. The hosted app and `localhost:5173` have separate saved sessions; open an image once on the hosted app to start its local workspace.
 
 Only the explicit Download action creates an output file through the browser's normal download behavior. The browser decides its download location; the app does not request filesystem or folder access.
 
