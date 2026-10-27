@@ -90,18 +90,18 @@ function updateView() {
   $('#compare').setAttribute('aria-pressed',compare);$('#image-holder').style.cursor=tool==='retouch'?'crosshair':'';
   if(tool!=='retouch'){$('#clone-marker').hidden=true;$('#brush-cursor').hidden=true;}
 }
-function setView(next){view=next;zoom=1;updateView();scheduleRender();}
+function setView(next){if(next!==view)$('#export-kind').value=next==='sheet'?'sheet':'image';view=next;zoom=1;updateView();scheduleRender();}
 $$('.main-tab').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 $$('[data-tool]').forEach(b=>b.addEventListener('click',()=>{tool=b.dataset.tool;updateView();}));
 $$('[data-mode]').forEach(b=>b.addEventListener('click',()=>{mode=b.dataset.mode;compare=false;updateView();scheduleRender();}));
 $('#compare').addEventListener('click',()=>{compare=!compare;updateView();scheduleRender();});
 $('#undo').addEventListener('click',undo);$('#redo').addEventListener('click',redo);
-$('#invert').addEventListener('change',e=>{remember();settings.invert=e.target.checked;updateView();scheduleRender();});
+$('#invert').addEventListener('change',e=>{remember();settings.invert=e.target.checked;$('#export-polarity').value=settings.invert?'negative':'positive';updateView();scheduleRender();});
 for(const key of ['mirror','flip'])$(`#${key}`).addEventListener('click',()=>{remember();settings[key]=!settings[key];clearClone();syncControls();scheduleRender();});
 $('#rotate').addEventListener('click',()=>{remember();settings.rotation=(settings.rotation+90)%360;clearClone();syncControls();scheduleRender();});
 $('#curve-preset').addEventListener('change',e=>{if(!CURVES[e.target.value])return;remember();curve=clone(CURVES[e.target.value]);drawCurve();scheduleRender();});
 $('#reset-all').addEventListener('click',()=>{remember();settings={...DEFAULTS};curve=clone(CURVES.linear);clearClone();syncControls();scheduleRender();});
-$('#dimension-unit').addEventListener('change',e=>{unit=e.target.value;syncControls();});
+$('#dimension-unit').addEventListener('change',e=>{unit=e.target.value;syncControls();scheduleRender();});
 for(const dimension of ['width','height'])$('#print-'+dimension).addEventListener('change',e=>{
   if(!source)return;const value=fromUnit(Number(e.target.value));if(!Number.isFinite(value)||value<=0){syncControls();return;}
   remember();const [w,h]=imageDimensions(source,settings);sheet.printWidth=clamp(dimension==='height'?value*w/h:value,10,2000);syncControls();scheduleRender();
@@ -210,7 +210,7 @@ function openVariant(v) {
   const image=renderRegion(source,v.settings,curve,mode,region,sheet.printWidth,200),c=$('#variation-canvas');
   c.width=image.width;c.height=image.height;c.getContext('2d').drawImage(image,0,0);$('#variation-dialog').showModal();
 }
-$('#apply-variation').addEventListener('click',()=>{if(!selectedVariant)return;remember();settings={...selectedVariant.settings};tool='adjust';view='lab';syncControls();scheduleRender();$('#variation-dialog').close();});
+$('#apply-variation').addEventListener('click',()=>{if(!selectedVariant)return;remember();settings={...selectedVariant.settings};tool='adjust';view='lab';$('#export-kind').value='image';syncControls();scheduleRender();$('#variation-dialog').close();});
 
 for(const [id,paper]of Object.entries(PAPER_SIZES)){
   const option=document.createElement('option');option.value=id;option.textContent=paper.label;$('#export-paper').append(option);
@@ -244,7 +244,7 @@ function fitExportPreview(){
   target.style.width=`${target.width*scale}px`;target.style.height=`${target.height*scale}px`;
 }
 new ResizeObserver(fitExportPreview).observe($('#export-preview-stage'));
-$$('.export-open').forEach(b=>b.addEventListener('click',()=>{if(!source)return;$('#export-kind').value=view==='sheet'?'sheet':'image';$('#export-polarity').value=settings.invert?'negative':'positive';$('#export-dialog').showModal();exportSummary();}));
+$$('.export-open').forEach(b=>b.addEventListener('click',()=>{if(!source)return;$('#export-dialog').showModal();exportSummary();}));
 $$('#export-dialog select').forEach(el=>el.addEventListener('change',exportSummary));
 $('#download-export').addEventListener('click',async()=>{
   if(busy||!source)return;busy=true;const button=$('#download-export');button.disabled=true;button.querySelector('span').textContent='Exporting…';$('#export-error').hidden=true;
@@ -283,7 +283,7 @@ async function loadFile(file) {
     const image=await decodeImage(file);if(generation!==loadGeneration)return;
     $('#export-dialog').close();$('#export-preview').width=1;$('#export-preview').height=1;
     source=original=imageCanvas(image);imageBlobs.set(original,Promise.resolve(file));sessionRevision++;
-    sourceName=file.name;settings={...DEFAULTS};curve=clone(CURVES.linear);sheet={...SHEET_DEFAULTS};
+    sourceName=file.name;settings={...DEFAULTS};curve=clone(CURVES.linear);sheet={...SHEET_DEFAULTS};$('#export-kind').value='image';$('#export-polarity').value='negative';
     undoStack=[];redoStack=[];clearClone();view='lab';mode='negative';tool='adjust';zoom=1;compare=false;
     syncControls();updateHistory();scheduleRender();saveSession();
   } catch(e){toast(e.message,true);}
