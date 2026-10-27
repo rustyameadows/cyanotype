@@ -2,6 +2,7 @@
 
 - Work on `main`. Commit and push coherent, tested milestones directly to GitHub `origin/main`; do not leave completed work only in the local checkout.
 - Keep the app local at http://localhost:5173. Publishing to ChatGPT Sites requires explicit user approval. A Site is reserved in `.openai/hosting.json` but has not been deployed.
+- Use a monochrome interface with the system UI font stack (San Francisco on Apple devices). Keep actual image and cyanotype preview colors intact.
 - This is a simple image tool: open URL, choose an image, edit, export. No branding, marketing copy, sample images, project/library/folder workflows, or project-file formats.
 - Keep user images, edits, and undo history in browser memory. Do not upload them, save them to the server, or persist them. Downloads must be explicit PNG/PDF exports.
 - Export no added text, headers, labels, or decorative frames. The user has requested paper sizes and a page preview: center artwork on the selected paper at its exact physical print scale, leaving unused paper white. Keep an image/sheet-size option with no surrounding paper. Never shrink artwork silently; flag a size mismatch and require a larger page or changed print size.

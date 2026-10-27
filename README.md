@@ -51,4 +51,4 @@ Source images above 6,000 px on the longest edge or 24 megapixels are resized wi
 - `src/app.js`: editing interface and in-memory state.
 - `test/engine.test.js`: image and geometry regression tests.
 
-Fonts are bundled under their OFL license in `assets/fonts/`.
+The interface uses a monochrome palette and the system UI font stack (San Francisco on Apple devices); no fonts are downloaded.

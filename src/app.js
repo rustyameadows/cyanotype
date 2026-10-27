@@ -132,7 +132,7 @@ function render() {
   fitPreview();drawCurve();
 }
 function fitPreview() {
-  if(!source)return;const area=$('#canvas-viewport'),maxW=area.clientWidth-56,maxH=area.clientHeight-56;if(maxW<=0||maxH<=0)return;
+  if(!source)return;const area=$('#canvas-viewport'),maxW=area.clientWidth-48,maxH=area.clientHeight-48;if(maxW<=0||maxH<=0)return;
   let w,h,target;
   if(view==='lab'){[w,h]=imageDimensions(source,settings);target=$('#image-mount');}
   else{const g=sheetGeometry(sheet);w=g.width;h=g.height;target=$('#sheet-preview');}
@@ -145,8 +145,8 @@ new ResizeObserver(fitPreview).observe($('#canvas-viewport'));
 function drawCurve(){
   const focusedHandle = document.activeElement?.closest('#curve-handles [data-index]')?.dataset.index;
   const histCanvas=$('#curve-canvas'),ctx=histCanvas.getContext('2d');ctx.clearRect(0,0,512,288);
-  ctx.strokeStyle='#c7d1bf';ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(i*128,0);ctx.lineTo(i*128,260);ctx.moveTo(0,i*65);ctx.lineTo(512,i*65);ctx.stroke();}
-  if(source){const c=canvas(128,128);c.getContext('2d').drawImage(source,0,0,128,128);const pixels=c.getContext('2d').getImageData(0,0,128,128).data,hist=Array(64).fill(0);for(let i=0;i<pixels.length;i+=4)hist[Math.min(63,Math.floor((pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722)/4))]++;const max=Math.max(...hist);ctx.fillStyle='#b2c1a36b';ctx.beginPath();ctx.moveTo(16,248);hist.forEach((v,i)=>ctx.lineTo(16+i/63*480,248-v/max*170));ctx.lineTo(496,248);ctx.closePath();ctx.fill();}
+  ctx.strokeStyle='#e1e1e1';ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(i*128,0);ctx.lineTo(i*128,260);ctx.moveTo(0,i*65);ctx.lineTo(512,i*65);ctx.stroke();}
+  if(source){const c=canvas(128,128);c.getContext('2d').drawImage(source,0,0,128,128);const pixels=c.getContext('2d').getImageData(0,0,128,128).data,hist=Array(64).fill(0);for(let i=0;i<pixels.length;i+=4)hist[Math.min(63,Math.floor((pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722)/4))]++;const max=Math.max(...hist);ctx.fillStyle='#bdbdbd80';ctx.beginPath();ctx.moveTo(16,248);hist.forEach((v,i)=>ctx.lineTo(16+i/63*480,248-v/max*170));ctx.lineTo(496,248);ctx.closePath();ctx.fill();}
   const lut=curveLut(curve);$('#curve-line').setAttribute('d',[...lut].filter((_,i)=>i%3===0||i===255).map((v,i)=>`${i?'L':'M'}${Math.min(255,i*3)/255*256},${144-v/255*144}`).join(' '));
   const handles=$('#curve-handles');handles.replaceChildren();curve.forEach(([x,y],i)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',x/255*256);c.setAttribute('cy',144-y/255*144);c.setAttribute('r','3.2');c.dataset.index=i;c.setAttribute('tabindex','0');c.setAttribute('role','slider');c.setAttribute('aria-label',`Curve point ${i+1} output`);c.setAttribute('aria-valuemin','0');c.setAttribute('aria-valuemax','255');c.setAttribute('aria-valuenow',y);c.addEventListener('keydown',e=>{if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();remember();if(e.key==='ArrowUp'||e.key==='ArrowDown')curve[i][1]=clamp(y+(e.key==='ArrowUp'?3:-3),0,255);else if(i>0&&i<curve.length-1)curve[i][0]=clamp(x+(e.key==='ArrowRight'?3:-3),curve[i-1][0]+5,curve[i+1][0]-5);$('#curve-preset').value='custom';drawCurve();$(`#curve-handles [data-index="${i}"]`).focus();scheduleRender();});handles.append(c);});
   if(focusedHandle!==undefined)$(`#curve-handles [data-index="${focusedHandle}"]`)?.focus({preventScroll:true});
@@ -175,7 +175,7 @@ $('#clear-retouch').addEventListener('click',()=>{if(source===original){return;}
 function drawCropPicker() {
   if(!source)return;const [w,h]=imageDimensions(source,settings),region=sampleRegion(w,h,sheet);
   const image=renderImage(source,settings,curve,'original',360),c=$('#crop-canvas');c.width=image.width;c.height=image.height;c.getContext('2d').drawImage(image,0,0);
-  const scale=Math.min(($('#controls').clientWidth-44)/w,160/h),wrapper=$('#crop-image');wrapper.style.width=`${w*scale}px`;wrapper.style.height=`${h*scale}px`;
+  const scale=Math.min(($('#controls').clientWidth-40)/w,148/h),wrapper=$('#crop-image');wrapper.style.width=`${w*scale}px`;wrapper.style.height=`${h*scale}px`;
   $('#crop-box').style.cssText=`left:${region.x/w*100}%;top:${region.y/h*100}%;width:${region.w/w*100}%;height:${region.h/h*100}%`;
   $('#crop-picker').setAttribute('aria-valuenow',Math.round(sheet.cropX*100));
   $('#crop-picker').setAttribute('aria-valuetext',`${Math.round((region.x+region.w/2)/w*100)}% across, ${Math.round((region.y+region.h/2)/h*100)}% down`);
