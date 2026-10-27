@@ -1,0 +1,113 @@
+export const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
+export const DEFAULTS = Object.freeze({ exposure: 0, contrast: 10, shadows: 0, highlights: 0, grain: 0, invert: true, mirror: false, flip: false, rotation: 0 });
+export const CURVES = {
+  linear: [[0, 0], [64, 64], [128, 128], [192, 192], [255, 255]],
+  soft: [[0, 12], [64, 73], [128, 133], [192, 189], [255, 246]],
+  contrast: [[0, 0], [64, 45], [128, 128], [192, 212], [255, 255]],
+};
+export const PAPER = { letter: [215.9, 279.4], a4: [210, 297], a5: [148, 210], square: [203.2, 203.2], custom: [203.2, 254] };
+export const mmToPx = (mm, dpi) => Math.round(mm / 25.4 * dpi);
+export const mmToPt = mm => mm / 25.4 * 72;
+
+// Shape-preserving cubic interpolation avoids ringing between curve handles.
+export function curveLut(points) {
+  const p = points.map(v => [...v]).sort((a, b) => a[0] - b[0]);
+  const d = p.slice(1).map((v, i) => (v[1] - p[i][1]) / Math.max(0.001, v[0] - p[i][0]));
+  const m = [d[0], ...d.slice(1).map((v, i) => d[i] * v <= 0 ? 0 : 2 / (1 / d[i] + 1 / v)), d.at(-1)];
+  return Uint8Array.from({ length: 256 }, (_, x) => {
+    let i = 0;
+    while (i < p.length - 2 && x > p[i + 1][0]) i++;
+    const h = p[i + 1][0] - p[i][0], t = clamp((x - p[i][0]) / h);
+    const y = (2*t**3-3*t**2+1)*p[i][1] + (t**3-2*t**2+t)*h*m[i] + (-2*t**3+3*t**2)*p[i+1][1] + (t**3-t**2)*h*m[i+1];
+    return Math.round(clamp(y, 0, 255));
+  });
+}
+
+export function noise(x, y) {
+  let n = Math.imul(x + 1, 374761393) ^ Math.imul(y + 1, 668265263);
+  n = Math.imul(n ^ n >>> 13, 1274126177);
+  return ((n ^ n >>> 16) >>> 0) / 4294967295 - 0.5;
+}
+
+export function toneLut(settings, points) {
+  const curve = curveLut(points);
+  const factor = (100 + settings.contrast) / Math.max(1, 100 - settings.contrast);
+  return Float32Array.from({ length: 256 }, (_, i) => {
+    let v = i / 255 * 2 ** settings.exposure;
+    v = (v - 0.5) * factor + 0.5;
+    v = clamp(v);
+    v = clamp(v + settings.shadows / 250 * (1 - v) ** 3 + settings.highlights / 250 * v ** 3);
+    return curve[Math.round(v * 255)] / 255;
+  });
+}
+
+export function processPixels(data, width, settings, points, mode = 'negative') {
+  const out = new Uint8ClampedArray(data.length), lut = toneLut(settings, points);
+  for (let i = 0; i < data.length; i += 4) {
+    const alpha = data[i + 3] / 255;
+    const gray = Math.round((0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2]) * alpha + 255 * (1-alpha));
+    let v = clamp(lut[gray] + noise((i/4)%width, Math.floor(i/4/width)) * settings.grain / 100);
+    if (settings.invert) v = 1 - v;
+    if (mode === 'proof') {
+      // White inkjet pixels are clear film: more light reaches the coating.
+      const density = v ** 0.85;
+      out[i] = 245 + (17-245)*density;
+      out[i+1] = 243 + (63-243)*density;
+      out[i+2] = 231 + (113-231)*density;
+    } else { out[i] = out[i+1] = out[i+2] = Math.round(v * 255); }
+    out[i+3] = 255;
+  }
+  return out;
+}
+
+export function variantGrid(settings, config) {
+  const count = config.layout === 'strip' ? 4 : config.layout === 'grid6' ? 6 : 9;
+  const cols = config.layout === 'strip' ? 1 : 3, rows = count / cols;
+  const valuesFor = (key, n, step) => {
+    const min = key === 'grain' ? 0 : key === 'exposure' ? -2 : key === 'contrast' ? -80 : -100;
+    const max = key === 'grain' ? 60 : key === 'exposure' ? 2 : key === 'contrast' ? 80 : 100;
+    const actualStep = Math.min(step, (max-min)/(n-1));
+    const start = clamp(settings[key] - (n-1)/2*actualStep, min, max-(n-1)*actualStep);
+    return Array.from({length:n},(_,i)=>Math.round((start+i*actualStep)*1000)/1000);
+  };
+  const twoAxes = config.layout !== 'strip' && config.axis2 !== 'none';
+  const horizontal = valuesFor(config.axis, twoAxes ? cols : count, config.step);
+  const vertical = twoAxes ? valuesFor(config.axis2, rows, config.step2) : null;
+  return Array.from({ length: count }, (_, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const s = { ...settings, [config.axis]: horizontal[twoAxes ? col : i] };
+    const values = [[config.axis, s[config.axis]]];
+    if (twoAxes) {
+      s[config.axis2] = vertical[row];
+      values.push([config.axis2, s[config.axis2]]);
+    }
+    return { index: i + 1, settings: s, values };
+  });
+}
+
+export function sheetGeometry(widthMM, heightMM, config) {
+  const columns = config.layout === 'strip' ? 1 : 3;
+  const rows = config.layout === 'strip' ? 4 : config.layout === 'grid6' ? 2 : 3;
+  const margin = Number(config.margin), gap = Number(config.gap), label = config.labels ? 8 : 0;
+  const header = config.labels ? 13 : 0;
+  const cellWidth = config.layout === 'strip' ? Math.min(70, widthMM-margin*2) : (widthMM - margin*2 - gap*(columns-1)) / columns;
+  const cellHeight = (heightMM - margin*2 - header - gap*(rows-1)) / rows;
+  if (cellWidth < 8 || cellHeight - label < 8) throw Error('Margins and spacing leave too little room for the images.');
+  const originX = config.layout === 'strip' ? (widthMM-cellWidth)/2 : margin;
+  return { columns, rows, margin, originX, gap, label, header, cellWidth, cellHeight };
+}
+
+// Feathered clone stamping works on the original color image, before tone mapping.
+export function cloneStamp(target, snapshot, width, height, x, y, sx, sy, radius, opacity = 1) {
+  for (let py = Math.max(0, Math.floor(y-radius)); py <= Math.min(height-1, y+radius); py++) {
+    for (let px = Math.max(0, Math.floor(x-radius)); px <= Math.min(width-1, x+radius); px++) {
+      const distance = Math.hypot(px-x, py-y) / radius;
+      if (distance >= 1) continue;
+      const sampleX = Math.round(sx + px-x), sampleY = Math.round(sy + py-y);
+      if (sampleX < 0 || sampleX >= width || sampleY < 0 || sampleY >= height) continue;
+      const a = (1 - distance ** 2) ** 2 * opacity, to = (py*width+px)*4, from = (sampleY*width+sampleX)*4;
+      for (let c = 0; c < 3; c++) target[to+c] = target[to+c]*(1-a) + snapshot[from+c]*a;
+      target[to+3] = 255;
+    }
+  }
+}
