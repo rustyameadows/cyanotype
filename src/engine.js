@@ -8,6 +8,34 @@ export const CURVES = {
 export const mmToPx = (mm, dpi) => Math.round(mm / 25.4 * dpi);
 export const mmToPt = mm => mm / 25.4 * 72;
 export const SHEET_DEFAULTS = Object.freeze({layout:'strip',axis:'contrast',step:15,axis2:'grain',step2:20,printWidth:150,tileWidth:50,tileHeight:50,divider:0.1,cropX:0.5,cropY:0.5});
+export const PAPER_SIZES = Object.freeze({
+  letter: {label:'Letter · 8.5 × 11 in',size:[215.9,279.4]},
+  tabloid: {label:'Tabloid · 11 × 17 in',size:[279.4,431.8]},
+  legal: {label:'Legal · 8.5 × 14 in',size:[215.9,355.6]},
+  superB: {label:'Super B · 13 × 19 in',size:[330.2,482.6]},
+  photo4x6: {label:'4 × 6 in',size:[101.6,152.4]},
+  photo5x7: {label:'5 × 7 in',size:[127,177.8]},
+  photo8x10: {label:'8 × 10 in',size:[203.2,254]},
+  photo11x14: {label:'11 × 14 in',size:[279.4,355.6]},
+  a5: {label:'A5 · 148 × 210 mm',size:[148,210]},
+  a4: {label:'A4 · 210 × 297 mm',size:[210,297]},
+  a3: {label:'A3 · 297 × 420 mm',size:[297,420]},
+});
+
+// Page placement never changes the artwork's physical print dimensions.
+export function pageLayout(artwork, paperId='artwork', orientation='portrait') {
+  if(!Array.isArray(artwork)||artwork.length!==2||artwork.some(n=>!Number.isFinite(n)||n<=0))throw Error('Invalid print dimensions.');
+  if(!['portrait','landscape'].includes(orientation))throw Error('Invalid page orientation.');
+  let paper=[...artwork];
+  if(paperId!=='artwork'){
+    if(!Object.hasOwn(PAPER_SIZES,paperId))throw Error('Choose a valid paper size.');
+    paper=[...PAPER_SIZES[paperId].size];
+    if(orientation==='landscape')paper.reverse();
+  }
+  const x=(paper[0]-artwork[0])/2,y=(paper[1]-artwork[1])/2;
+  const fits=artwork[0]<=paper[0]+1e-7&&artwork[1]<=paper[1]+1e-7;
+  return {paper,artwork:[...artwork],x,y,fits};
+}
 
 // Shape-preserving cubic interpolation avoids ringing between curve handles.
 export function curveLut(points) {

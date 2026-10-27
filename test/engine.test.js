@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, CURVES, SHEET_DEFAULTS, curveLut, processPixels, variantGrid, mmToPx, mmToPt, sheetGeometry, sampleRegion, cloneStamp } from '../src/engine.js';
+import { DEFAULTS, CURVES, SHEET_DEFAULTS, PAPER_SIZES, pageLayout, curveLut, processPixels, variantGrid, mmToPx, mmToPt, sheetGeometry, sampleRegion, cloneStamp } from '../src/engine.js';
 import { adjustmentLabel } from '../src/render.js';
 test('linear curves preserve every gray value', () => { assert.deepEqual([...curveLut(CURVES.linear)], Array.from({length:256},(_,i)=>i)); });
 test('a print negative reverses black and white; proof restores print polarity', () => {
@@ -15,6 +15,37 @@ test('transparent image pixels export as opaque white before inversion', () => {
   assert.equal(processPixels(new Uint8ClampedArray([0,0,0,0]),1,{...DEFAULTS,invert:false},CURVES.linear)[0],255);
 });
 test('paper sizing uses actual inches and 72 point PDF units', () => { assert.equal(mmToPx(215.9,300),2550); assert.equal(mmToPx(279.4,300),3300); assert.ok(Math.abs(mmToPt(215.9)-612)<1e-8); });
+test('standard paper presets have correct physical and raster sizes', () => {
+  assert.deepEqual(PAPER_SIZES.letter.size.map(n=>mmToPx(n,300)),[2550,3300]);
+  assert.deepEqual(PAPER_SIZES.tabloid.size.map(n=>mmToPx(n,300)),[3300,5100]);
+  assert.deepEqual(PAPER_SIZES.photo4x6.size.map(n=>mmToPx(n,300)),[1200,1800]);
+  assert.deepEqual(PAPER_SIZES.photo5x7.size.map(n=>mmToPx(n,300)),[1500,2100]);
+  assert.deepEqual(PAPER_SIZES.photo8x10.size.map(n=>mmToPx(n,300)),[2400,3000]);
+});
+test('placing on paper centers the artwork without changing print dimensions', () => {
+  const art=[150,225],layout=pageLayout(art,'letter');
+  assert.deepEqual(layout.artwork,art);assert.deepEqual(layout.paper,[215.9,279.4]);
+  assert.ok(Math.abs(layout.x-32.95)<1e-8);assert.ok(Math.abs(layout.y-27.2)<1e-8);assert.equal(layout.fits,true);
+});
+test('landscape changes the page orientation without rotating or resizing artwork', () => {
+  const layout=pageLayout([225,150],'letter','landscape');
+  assert.deepEqual(layout.paper,[279.4,215.9]);assert.deepEqual(layout.artwork,[225,150]);assert.equal(layout.fits,true);
+  assert.equal(pageLayout([225,150],'letter','portrait').fits,false);
+});
+test('oversized artwork is flagged instead of silently fitted onto smaller paper', () => {
+  const layout=pageLayout([150,225],'photo4x6');
+  assert.equal(layout.fits,false);assert.deepEqual(layout.artwork,[150,225]);
+  assert.ok(layout.x<0&&layout.y<0);
+});
+test('exact-size exports preserve the existing continuous-strip dimensions', () => {
+  const g=sheetGeometry(SHEET_DEFAULTS),art=[g.width,g.height],layout=pageLayout(art,'artwork','landscape');
+  assert.deepEqual(layout.paper,art);assert.equal(layout.x,0);assert.equal(layout.y,0);assert.equal(layout.fits,true);
+});
+test('paper placement tolerates unit-conversion rounding at an exact edge', () => {
+  assert.equal(pageLayout([8.5*25.4,11*25.4],'letter').fits,true);
+  assert.throws(()=>pageLayout([NaN,10],'letter'));
+  assert.throws(()=>pageLayout([10,10],'unknown'));
+});
 test('contact grid varies both axes independently around the base', () => {
   const v = variantGrid({...DEFAULTS,contrast:20,grain:20},{layout:'grid9',axis:'contrast',axis2:'grain',step:10,step2:10});
   assert.equal(v.length,9); assert.equal(v[0].settings.contrast,10); assert.equal(v[0].settings.grain,10);

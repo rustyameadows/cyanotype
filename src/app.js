@@ -1,5 +1,5 @@
-import { DEFAULTS, CURVES, SHEET_DEFAULTS, clamp, curveLut, variantGrid, sheetGeometry, sampleRegion, cloneStamp, mmToPx } from './engine.js';
-import { canvas, renderImage, renderRegion, imageDimensions, renderSheet, renderPrint, adjustmentLabel, pdfBlob, pngBlob, download } from './render.js';
+import { DEFAULTS, CURVES, SHEET_DEFAULTS, PAPER_SIZES, pageLayout, clamp, curveLut, variantGrid, sheetGeometry, sampleRegion, cloneStamp, mmToPx } from './engine.js';
+import { canvas, renderImage, renderRegion, imageDimensions, renderSheet, printDimensions, renderExport, adjustmentLabel, pdfBlob, pngBlob, download } from './render.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -210,27 +210,53 @@ function openVariant(v) {
 }
 $('#apply-variation').addEventListener('click',()=>{if(!selectedVariant)return;remember();settings={...selectedVariant.settings};tool='adjust';view='lab';syncControls();scheduleRender();$('#variation-dialog').close();});
 
-function outputDimensions(kind) {
-  if(kind==='sheet'){const g=sheetGeometry(sheet);return[g.width,g.height];}
-  const [w,h]=imageDimensions(source,settings);return[sheet.printWidth,sheet.printWidth*h/w];
+for(const [id,paper]of Object.entries(PAPER_SIZES)){
+  const option=document.createElement('option');option.value=id;option.textContent=paper.label;$('#export-paper').append(option);
 }
-function exportOptions(){return{kind:$('#export-kind').value,dpi:Number($('#export-dpi').value),polarity:$('#export-polarity').value,sheet:{...sheet}};}
+const exactSizeOption=document.createElement('option');exactSizeOption.value='artwork';exactSizeOption.textContent='Image / sheet size';$('#export-paper').append(exactSizeOption);
+function exportOptions(){return{kind:$('#export-kind').value,dpi:Number($('#export-dpi').value),polarity:$('#export-polarity').value,paper:$('#export-paper').value,orientation:$('#export-orientation').value,sheet:{...sheet}};}
+function exportPlacement(options){return pageLayout(printDimensions(source,settings,options),options.paper,options.orientation);}
+let exportPreviewFrame=0;
 function exportSummary() {
-  if(!source)return;const o=exportOptions(),dimensions=outputDimensions(o.kind),[w]=imageDimensions(source,settings);
-  $('#export-summary').textContent=`${dimensions.map(formatMM).join(' × ')} mm\n${dimensions.map(n=>mmToPx(n,o.dpi)).join(' × ')} px · ${o.dpi} DPI\nSource: ${Math.round(w/sheet.printWidth*25.4)} DPI`;
+  if(!source)return;const o=exportOptions(),layout=exportPlacement(o);
+  $('#export-orientation').disabled=o.paper==='artwork';
+  $('#export-summary').textContent=`${o.kind==='sheet'?'Sheet':'Image'}: ${layout.artwork.map(formatMM).join(' × ')} mm\nPage: ${layout.paper.map(formatMM).join(' × ')} mm\n${layout.paper.map(n=>mmToPx(n,o.dpi)).join(' × ')} px · ${o.dpi} DPI`;
+  const tooLarge=mmToPx(layout.paper[0],o.dpi)*mmToPx(layout.paper[1],o.dpi)>36_000_000;
+  const error=!layout.fits?'Doesn’t fit at 100%. Choose larger paper or change Print size.':tooLarge?'Page exceeds 36 megapixels. Choose a lower DPI.':'';
+  $('#export-error').textContent=error;$('#export-error').hidden=!error;$('#download-export').disabled=!!error||busy;
+  if(!exportPreviewFrame)exportPreviewFrame=requestAnimationFrame(()=>{exportPreviewFrame=0;drawExportPreview();});
 }
-$$('.export-open').forEach(b=>b.addEventListener('click',()=>{if(!source)return;$('#export-kind').value=view==='sheet'?'sheet':'image';$('#export-polarity').value=settings.invert?'negative':'positive';$('#export-error').hidden=true;exportSummary();$('#export-dialog').showModal();}));
+function drawExportPreview(){
+  if(!source||!$('#export-dialog').open)return;
+  try{
+    const options=exportOptions(),layout=exportPlacement(options);
+    const dpi=Math.min(96,750/Math.max(...layout.paper,...layout.artwork)*25.4);
+    const preview=renderExport(source,settings,curve,{...options,dpi},{allowOverflow:true}),target=$('#export-preview');
+    target.width=preview.width;target.height=preview.height;target.getContext('2d').drawImage(preview,0,0);
+    target.classList.toggle('does-not-fit',!layout.fits);fitExportPreview();
+  }catch(e){$('#export-error').textContent=e.message;$('#export-error').hidden=false;$('#download-export').disabled=true;}
+}
+function fitExportPreview(){
+  const stage=$('#export-preview-stage'),target=$('#export-preview');if(!target.width||!stage.clientWidth)return;
+  const scale=Math.min((stage.clientWidth-40)/target.width,(stage.clientHeight-40)/target.height);
+  target.style.width=`${target.width*scale}px`;target.style.height=`${target.height*scale}px`;
+}
+new ResizeObserver(fitExportPreview).observe($('#export-preview-stage'));
+$$('.export-open').forEach(b=>b.addEventListener('click',()=>{if(!source)return;$('#export-kind').value=view==='sheet'?'sheet':'image';$('#export-polarity').value=settings.invert?'negative':'positive';$('#export-dialog').showModal();exportSummary();}));
 $$('#export-dialog select').forEach(el=>el.addEventListener('change',exportSummary));
 $('#download-export').addEventListener('click',async()=>{
   if(busy||!source)return;busy=true;const button=$('#download-export');button.disabled=true;button.querySelector('span').textContent='Exporting…';$('#export-error').hidden=true;
   try {
-    const o=exportOptions(),dimensions=outputDimensions(o.kind);await new Promise(r=>setTimeout(r,30));
-    const output=renderPrint(source,settings,curve,o),format=$('#export-format').value;
-    const blob=await(format==='pdf'?pdfBlob(output,dimensions):pngBlob(output,o.dpi));
+    const o=exportOptions(),layout=exportPlacement(o);await new Promise(r=>setTimeout(r,30));
+    const output=renderExport(source,settings,curve,o),format=$('#export-format').value;
+    const blob=await(format==='pdf'?pdfBlob(output,layout.paper):pngBlob(output,o.dpi));
     const basename=sourceName.replace(/\.[^.]+$/,'').replace(/[^a-z0-9_-]/gi,'-')||'image';
-    download(blob,`${basename}-${o.kind==='sheet'?'tests':'image'}-${o.polarity}-${o.dpi}dpi.${format}`);
+    download(blob,`${basename}-${o.kind==='sheet'?'tests':'image'}-${o.paper}-${o.polarity}-${o.dpi}dpi.${format}`);
   } catch(e){$('#export-error').textContent=e.message;$('#export-error').hidden=false;}
-  finally{busy=false;button.disabled=false;button.querySelector('span').textContent='Download';}
+  finally{
+    busy=false;button.querySelector('span').textContent='Download';
+    if(source){const options=exportOptions(),layout=exportPlacement(options);button.disabled=!layout.fits||mmToPx(layout.paper[0],options.dpi)*mmToPx(layout.paper[1],options.dpi)>36_000_000;}
+  }
 });
 
 // Images, edits, and history exist only in this tab's memory. No uploads or saves.
@@ -253,6 +279,7 @@ async function loadFile(file) {
   if(!/^image\/(jpeg|png|webp|avif|bmp|x-ms-bmp)$/i.test(file.type)&&!/^.*\.(png|jpe?g|webp|avif|bmp)$/i.test(file.name)){toast('Choose a JPEG, PNG, WebP, AVIF, or BMP.',true);return;}
   try {
     const image=await decodeImage(file);if(generation!==loadGeneration)return;
+    $('#export-dialog').close();$('#export-preview').width=1;$('#export-preview').height=1;
     source=original=imageCanvas(image);sourceName=file.name;settings={...DEFAULTS};curve=clone(CURVES.linear);sheet={...SHEET_DEFAULTS};
     undoStack=[];redoStack=[];clearClone();view='lab';mode='negative';tool='adjust';zoom=1;compare=false;
     syncControls();updateHistory();scheduleRender();
@@ -262,7 +289,7 @@ $$('.upload-trigger').forEach(b=>b.addEventListener('click',()=>$('#image-input'
 $('#image-input').addEventListener('change',e=>{loadFile(e.target.files[0]);e.target.value='';});
 $('#close-image').addEventListener('click',()=>{
   loadGeneration++;source=null;original=null;sourceName='';undoStack=[];redoStack=[];selectedVariant=null;clearClone();
-  for(const id of ['preview-canvas','variation-canvas','crop-canvas']){const c=$('#'+id);c.width=1;c.height=1;}
+  for(const id of ['preview-canvas','variation-canvas','crop-canvas','export-preview']){const c=$('#'+id);c.width=1;c.height=1;}
   $('#sheet-preview').replaceChildren();$('#variant-list').replaceChildren();$('#source-name').textContent='';$('#source-dimensions').textContent='';updateHistory();updateView();
 });
 let dragDepth=0;

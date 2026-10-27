@@ -1,4 +1,4 @@
-import { processPixels, sheetGeometry, sampleRegion, variantGrid, mmToPx, mmToPt } from './engine.js';
+import { processPixels, sheetGeometry, sampleRegion, variantGrid, pageLayout, mmToPx, mmToPt } from './engine.js';
 
 export function canvas(width, height) {
   const c = document.createElement('canvas');
@@ -57,14 +57,32 @@ export function renderSheet(source, settings, curve, config, mode='negative', dp
   return {canvas:c,cells,geometry:g};
 }
 
+export function printDimensions(source,settings,options) {
+  if(options.kind==='sheet'){const g=sheetGeometry(options.sheet);return[g.width,g.height];}
+  const [w,h]=imageDimensions(source,settings);return[options.sheet.printWidth,options.sheet.printWidth*h/w];
+}
+
 export function renderPrint(source, settings, curve, options) {
-  const [sw,sh]=imageDimensions(source,settings),g=sheetGeometry(options.sheet);
-  const dimensions=options.kind==='sheet'?[g.width,g.height]:[options.sheet.printWidth,options.sheet.printWidth*sh/sw];
+  const [sw,sh]=imageDimensions(source,settings),dimensions=printDimensions(source,settings,options);
   const width=mmToPx(dimensions[0],options.dpi),height=mmToPx(dimensions[1],options.dpi);
   if(width*height>36_000_000)throw Error('Export exceeds 36 megapixels. Reduce the size or DPI.');
   const printSettings={...settings,invert:options.polarity==='negative'};
   if(options.kind==='sheet')return renderSheet(source,printSettings,curve,options.sheet,'negative',options.dpi).canvas;
   return renderRegion(source,printSettings,curve,'negative',{x:0,y:0,w:sw,h:sh},options.sheet.printWidth,options.dpi);
+}
+
+export function renderExport(source,settings,curve,options,{allowOverflow=false}={}) {
+  const layout=pageLayout(printDimensions(source,settings,options),options.paper,options.orientation);
+  if(!layout.fits&&!allowOverflow)throw Error('Doesn’t fit at 100%. Choose larger paper or change Print size.');
+  const width=mmToPx(layout.paper[0],options.dpi),height=mmToPx(layout.paper[1],options.dpi);
+  if(width*height>36_000_000)throw Error('Page exceeds 36 megapixels. Reduce the size or DPI.');
+  const artwork=renderPrint(source,settings,curve,options);
+  if(!options.paper||options.paper==='artwork')return artwork;
+  const page=canvas(width,height),ctx=page.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,page.width,page.height);
+  // Copy at native raster size: placing on paper must not resample the negative.
+  ctx.drawImage(artwork,Math.round((page.width-artwork.width)/2),Math.round((page.height-artwork.height)/2));
+  return page;
 }
 
 const encode = s => new TextEncoder().encode(s);

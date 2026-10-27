@@ -32,9 +32,9 @@ Layouts: four-up continuous strip, 3 × 2 grid, and 3 × 3 grid. Tiles touch wit
 
 ## Export
 
-PNG and PDF at 150, 300, or 600 DPI. Files contain only the image or sample tiles and selected hairline dividers: no text, headers, labels, margins, decorative borders, or printer-page composition.
+PNG and PDF at 150, 300, or 600 DPI. Choose Letter (8.5 × 11), Tabloid (11 × 17), Legal, 13 × 19, 4 × 6, 5 × 7, 8 × 10, 11 × 14, A5, A4, or A3 paper, in portrait or landscape. Export shows a live page preview. The image or contiguous test sheet is centered at its exact physical print size; unused paper is white. If the artwork does not fit, download is blocked until the paper or print size changes. It is never silently scaled down.
 
-PDF page dimensions equal the output's physical dimensions. PNG includes DPI metadata. Print at 100% / actual size.
+Select **Image / sheet size** to export just the artwork with no surrounding paper. No mode adds text, headers, labels, or decorative borders. PDF page dimensions match the selected paper (or exact artwork size); PNG has matching raster dimensions and DPI metadata. Print at 100% / actual size. Very large pages may require a lower DPI to stay under the export memory limit.
 
 ## Data handling
 

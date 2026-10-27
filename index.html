@@ -63,7 +63,20 @@
     </section>
   </main>
   <div id="drop-overlay" hidden><svg><use href="#i-upload"/></svg>Open image</div>
-  <dialog id="export-dialog"><form method="dialog" class="dialog-content"><button class="dialog-close icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2>Export</h2><label class="select-label" for="export-kind">Content</label><select id="export-kind" class="full-select"><option value="image">Image</option><option value="sheet">Contact sheet</option></select><div class="two-fields"><label>Format<select id="export-format"><option value="png">PNG</option><option value="pdf">PDF</option></select></label><label>Resolution<select id="export-dpi"><option value="150">150 DPI</option><option value="300" selected>300 DPI</option><option value="600">600 DPI</option></select></label></div><label class="select-label" for="export-polarity">Polarity</label><select id="export-polarity" class="full-select"><option value="negative">Negative</option><option value="positive">Positive</option></select><div class="export-summary" id="export-summary"></div><p class="field-note">Print at 100% / actual size.</p><p id="export-error" class="error-text" role="alert" hidden></p><button id="download-export" class="button primary full-width" type="button"><svg><use href="#i-download"/></svg><span>Download</span></button></form></dialog>
+  <dialog id="export-dialog"><form method="dialog" class="dialog-content">
+    <button class="dialog-close icon-button" aria-label="Close"><svg><use href="#i-close"/></svg></button><h2>Export</h2>
+    <div class="export-layout">
+      <div class="export-settings">
+        <label class="select-label" for="export-kind">Content</label><select id="export-kind" class="full-select"><option value="image">Image</option><option value="sheet">Contact sheet</option></select>
+        <label class="select-label" for="export-paper">Paper size</label><select id="export-paper" class="full-select"></select>
+        <div class="two-fields"><label>Orientation<select id="export-orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label><label>Polarity<select id="export-polarity"><option value="negative">Negative</option><option value="positive">Positive</option></select></label></div>
+        <div class="two-fields"><label>Format<select id="export-format"><option value="pdf">PDF</option><option value="png">PNG</option></select></label><label>Resolution<select id="export-dpi"><option value="150">150 DPI</option><option value="300" selected>300 DPI</option><option value="600">600 DPI</option></select></label></div>
+        <div class="export-summary" id="export-summary"></div><p id="export-error" class="error-text" role="alert" hidden></p>
+        <button id="download-export" class="button primary full-width" type="button"><svg><use href="#i-download"/></svg><span>Download</span></button>
+      </div>
+      <div class="export-preview-panel"><div id="export-preview-stage" class="export-preview-stage"><canvas id="export-preview" aria-label="Paper preview at the selected print size"></canvas></div><p class="field-note">Print at 100% / actual size.</p></div>
+    </div>
+  </form></dialog>
   <dialog id="variation-dialog"><div class="dialog-content"><button class="dialog-close icon-button" aria-label="Close" data-close="variation-dialog"><svg><use href="#i-close"/></svg></button><h2 id="variation-title"></h2><canvas id="variation-canvas"></canvas><p id="variation-description"></p><button id="apply-variation" class="button primary full-width">Apply settings</button></div></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
   <script type="module" src="./src/app.js"></script>
